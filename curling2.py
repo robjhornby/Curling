@@ -4,6 +4,7 @@ import copy
 
 PRINT = True
 
+
 class Card:
     def __init__(self, name, suit):
         self.name = str(name)
@@ -56,15 +57,15 @@ class Board:
                             2: [(self.joker_pos - 1, self.joker_pos), (self.joker_pos, self.joker_pos - 1),
                                 (self.joker_pos + 1, self.joker_pos), (self.joker_pos, self.joker_pos + 1)]}
 
-
         self.first_turn = False
-        
+
     @property
     def cards(self):
-        return self._cards
+        return [r[:] for r in self._cards]
 
     def finalise(self):
         self._final = 1
+
     def unfinalise(self):
         self._final = 0
 
@@ -85,7 +86,7 @@ class Board:
             raise Exception('Trying to score points on a finalised board for {}'.format(player.name))
         return out
 
-    def update(self, ply, undo=False, undiscard = ''):
+    def update(self, ply, undo=False, undiscard=''):
         '''Starting from the outside left as column 0, top as row 0, place your card outisde the space you want to
         insert it, e.g. 0, 2 to insert from the left into the second row'''
         if undo and undiscard == '':
@@ -94,10 +95,10 @@ class Board:
             card = undiscard
         else:
             card = ply.card
-            
+
         error = ''
         if self.is_setup_phase() and not undo:
-            
+
             l = self.get_empty()
             if (ply.row, ply.column) not in l:
                 if PRINT:
@@ -113,22 +114,21 @@ class Board:
             return discarded, error
 
         elif undo and (self.is_setup_phase() or self.first_turn):
-            self._cards[ply.row-1][ply.column-1] = ''
+            self._cards[ply.row - 1][ply.column - 1] = ''
             self.first_turn = False
-            
-            return 'undo', error
-            
 
-        #Check insertion condition, determine if a row or column is being inserted to
-        if 0 < ply.row <= self.size and ply.column in (0, self.size+1):
+            return 'undo', error
+
+        # Check insertion condition, determine if a row or column is being inserted to
+        if 0 < ply.row <= self.size and ply.column in (0, self.size + 1):
             tempcards = self._cards
-            ins_row = True                  #row or column?
-            ins_left = (ply.column == 0) ^ undo #left(top) or right(bottom)? (reverse if undoing)
-            ins_pos = ply.row               #row(col) index
-        elif 0 < ply.column <= self.size and ply.row in (0, self.size+1):
-            #treat row and column insertion the same by transposing the card list for one of them
+            ins_row = True  # row or column?
+            ins_left = (ply.column == 0) ^ undo  # left(top) or right(bottom)? (reverse if undoing)
+            ins_pos = ply.row  # row(col) index
+        elif 0 < ply.column <= self.size and ply.row in (0, self.size + 1):
+            # treat row and column insertion the same by transposing the card list for one of them
             tempcards = [x for x in map(list, zip(*self._cards))]
-            #column insertion
+            # column insertion
             ins_row = False
             ins_left = (ply.row == 0) ^ undo
             ins_pos = ply.column
@@ -139,20 +139,19 @@ class Board:
             error = 'Invalid row/column'
             return discarded, error
 
-        #treat left and right insertion the same by reversing in one case
+        # treat left and right insertion the same by reversing in one case
         if ins_left:
             card_row = tempcards[ins_pos - 1]
         else:
             card_row = tempcards[ins_pos - 1][::-1]
-            
-        
+
         discarded = card_row[-1]
         new_row = [card] + card_row[:-1]
-        #put the joker back in the right place if we're in that row/col
+        # put the joker back in the right place if we're in that row/col
         if ins_pos == self.joker_pos + 1:
-            new_row.insert(self.joker_pos, new_row.pop(self.joker_pos+1))
+            new_row.insert(self.joker_pos, new_row.pop(self.joker_pos + 1))
 
-        #undo the row reverse and transpose
+        # undo the row reverse and transpose
         if not ins_left:
             new_row.reverse()
         if ins_row:
@@ -160,14 +159,14 @@ class Board:
         else:
             tempcards[ins_pos - 1] = new_row
             self._cards = [x for x in map(list, zip(*tempcards))]
-            
+
         discarded.discarded = (not undo)  # Set card attribute
         self.first_turn = False
         return discarded, error
 
     def is_setup_phase(self):
         return (len(self.get_empty()) > 0)
-    
+
     def __repr__(self):
         out = []
         for row in self._cards:
@@ -182,8 +181,7 @@ class Board:
         #  return '\n'.join(' '.join(str(card) for card in rows) for rows in self._cards) + '\n'
 
 
-
-#The information a player gives to the game to make a ply (move)
+# The information a player gives to the game to make a ply (move)
 class Ply:
     def __init__(self, card, row, column):
         self.card = card
@@ -195,6 +193,7 @@ class Ply:
     def __repr__(self):
         return (repr(self.card) + " at " + str(self.row) + ", " + str(self.column))
 
+
 class Player:
     def __init__(self, name, suit):
         self.score = 0
@@ -204,9 +203,9 @@ class Player:
         self.hand = [Card(i, suit) for i in l]
 
         self.AI = False
-        
-        self.postinit()  #hook for inheriting classes
-        
+
+        self.postinit()  # hook for inheriting classes
+
     def postinit(self):
         pass
 
@@ -226,7 +225,6 @@ class Player:
                 return True
         raise Exception('Card not removed')
 
-
     def unplay(self, card):
         if self.in_hand(card):
             raise Exception('Card {} aleady in hand during tree backtrack'.format(card))
@@ -235,25 +233,24 @@ class Player:
         self.hand.append(card)
         return True
 
-
     def alter_score(self, delta):
         if delta > 500:
             raise Exception('Trying to add score above 500')
         self.score += delta
         return self.score
-    
-    #To be implemented by inheriting classes
+
+    # To be implemented by inheriting classes
     def make_move(self, board, players, discarded, p_turn, statement):
         pass
 
     def __repr__(self):
         return '{} ({})'.format(self.name, self.suit)
 
-    
+
 class HumanPlayer(Player):
     def postinit(self):
         self.AI = False
-        
+
     def make_move(self, game_state):
         while 1:
             while 1:
@@ -275,12 +272,12 @@ class HumanPlayer(Player):
                 else:
                     break
             return Ply(card, row, column)
-            
+
 
 class AIPlayer(Player):
     def postinit(self):
         self.AI = True
-        
+
     def make_move(self, game_state):
         if self.hand:
             card = max(self.hand, key=lambda x: x.value)
@@ -288,7 +285,7 @@ class AIPlayer(Player):
             raise Exception("Empty Hand")
         # print(card)
         empty = game_state.board.get_empty()
-        #print(empty)
+        # print(empty)
         if empty:
             row, column = random.choice(empty)
         else:
@@ -305,52 +302,50 @@ class AIPlayer(Player):
 class AITreeSearch(Player):
     def postinit(self):
         self.AI = True
-        self.depth = 4 #tree search depth (plies)
-        self.t_game = [] #to hold the local version of the game
+        self.depth = 4  # tree search depth (plies)
+        self.t_game = []  # to hold the local version of the game
 
     def make_move(self, game_state):
-        #entry point
+        # entry point
         global PRINT
         PRINT = False
         print("Enter AITree make_move")
-        #create local version of the game without letting it enter its game loop
-        self.t_game = Game(game_state, autostart = False)#copy.deepcopy(Game(game_state, autostart = False))
+        # create local version of the game without letting it enter its game loop
+        self.t_game = Game(game_state, autostart=False)  # copy.deepcopy(Game(game_state, autostart = False))
 
-
-        #do a tree search recursively to find the best ply and its expected scores
+        # do a tree search recursively to find the best ply and its expected scores
         bestscores, bestply = self.tree_search(self.t_game, 2)
 
-
-        #point the resulting card object to the actual card in the real game
+        # point the resulting card object to the actual card in the real game
         for card in self.hand:
             if card.name == bestply.card.name:
                 bestply.card = card
         print("Exit AITree make_move, best scores: " + repr(bestscores))
         PRINT = True
         return bestply
-    
-    #given a game state, generate all the moves the current player could make
+
+    # given a game state, generate all the moves the current player could make
     def enum_plies(self, game):
-        #assuming we have cards left to play
+        # assuming we have cards left to play
         player = game.players[game.p_turn]
-        card_options = sorted(player.hand, key=lambda x: -x.value) #cards ordered high-low
-        
+        card_options = sorted(player.hand, key=lambda x: -x.value)  # cards ordered high-low
+
         if game.board.is_setup_phase():
             rowcol_options = game.board.get_empty()
         else:
             bsize = game.board.size
-            rowcol_options = [(0,i) for i in range(1,bsize+1)] + \
-                             [(bsize+1,i) for i in range(1,bsize+1)] + \
-                             [(i,0) for i in range(1,bsize+1)] + \
-                             [(i,bsize+1) for i in range(1,bsize+1)]
+            rowcol_options = [(0, i) for i in range(1, bsize + 1)] + \
+                             [(bsize + 1, i) for i in range(1, bsize + 1)] + \
+                             [(i, 0) for i in range(1, bsize + 1)] + \
+                             [(i, bsize + 1) for i in range(1, bsize + 1)]
 
-        #just choose the highest value card for now
+        # just choose the highest value card for now
         card_choice = card_options[0]
-        
+
         for rowcol in rowcol_options:
             yield Ply(card_choice, rowcol[0], rowcol[1])
 
-    #recursive search of future moves to the given depth
+    # recursive search of future moves to the given depth
     def tree_search(self, game, depth):
         plyvalues = []
         p_turn = game.p_turn
@@ -361,44 +356,43 @@ class AITreeSearch(Player):
             game.make_move(ply)
             if game.gameover:
                 depth = 0
-                
+
             if depth == 0:
                 node_value = self.heuristic_eval(game)
             else:
-                node_value = self.tree_search(game, depth-1)[0]
-            
+                node_value = self.tree_search(game, depth - 1)[0]
+
             game.unmake_move()
-            if best =='' or node_value[p_turn] > best[p_turn]:
+            if best == '' or node_value[p_turn] > best[p_turn]:
                 best = node_value
                 bestply = ply
-    
+
         return best, bestply
-            
-        
-    #returns the value of the current game for each player in a three-item list
-    #trying to take into account immediate future moves without doing a tree search
-    #(so that this evaluation doesn't favour the player who just played)
+
+    # returns the value of the current game for each player in a three-item list
+    # trying to take into account immediate future moves without doing a tree search
+    # (so that this evaluation doesn't favour the player who just played)
     def heuristic_eval(self, game):
         if not game.gameover:
             values = [0] * len(game.players)
             for i, player in enumerate(game.players):
-                waittime = (i - game.p_turn) % len(game.players) #plies until your next ply
+                waittime = (i - game.p_turn) % len(game.players)  # plies until your next ply
                 score = player.score
-                boardscore = game.board.score(player) * (4-waittime) #how good the board is
-                #add some value for cards not currently in scoring positions
-                for row, x in enumerate(game.board._cards):
+                boardscore = game.board.score(player) * (4 - waittime)  # how good the board is
+                # add some value for cards not currently in scoring positions
+                for row, x in enumerate(game.board.cards):
                     for column, card in enumerate(x):
                         if card != '' and card.suit == player.suit:
-                            if row in (2,3,4) or column in (2,3,4):
-                                boardscore += 0.5*card.value
+                            if row in (2, 3, 4) or column in (2, 3, 4):
+                                boardscore += 0.5 * card.value
                             else:
-                                boardscore += 0.2*card.value
-                            
-                #point difference with the best player other than yourself
+                                boardscore += 0.2 * card.value
+
+                # point difference with the best player other than yourself
                 pointdiff = score - max([x.score for x in game.players if x.name != player.name])
 
                 hand_potential = sum([c.value for c in player.hand])
-                values[i] = pointdiff + 0.2*boardscore + 0.5*hand_potential
+                values[i] = pointdiff + 0.2 * boardscore + 0.5 * hand_potential
         else:
             maxscore = 0
             winner_id = 0
@@ -406,32 +400,33 @@ class AITreeSearch(Player):
                 if player.score > maxscore:
                     maxscore = player.score
                     winner_id = i
-            #losers have a large negative score
-            values = [-10000]*len(game.players)
-            #winner has a large positive score
+            # losers have a large negative score
+            values = [-10000] * len(game.players)
+            # winner has a large positive score
             values[winner_id] = 10000
-            
+
         return values
 
 
-        
+# class CurlingIO:
+#     def __init__(self):
+#         pass
+
+def dump(game_state, fname):
+    with open(fname, 'wb') as f:
+        pickle.dump(game_state, f)
 
 
-class CurlingIO:
-    def __init__(self):
-        pass
-    
-    def dump(self, game_state, fname):
-        with open(fname, 'wb') as f:
-            pickle.dump(game_state,f)
-
-    def load(self, fname):
-        with open(fname, 'rb') as f:
-            game_state = pickle.load(f)
-        return game_state
+def load(fname):
+    with open(fname, 'rb') as f:
+        game_state = pickle.load(f)
+    return game_state
 
 
-#the information which players are sent to make their move
+
+
+
+# the information which players are sent to make their move
 class GameState:
     def __init__(self, board, players, discarded, p_turn, gameover):
         self.board = board
@@ -440,20 +435,20 @@ class GameState:
         self.p_turn = p_turn
         self.next_player = self.players[self.p_turn]
         self.gameover = gameover
-        
 
     def statement(self):
         if not self.gameover:
-            return "{}'s turn\nThey scored {} points\nThey have in their hand:\n{}"\
-                   .format(self.next_player,\
-                           self.board.score(self.next_player),\
-                           str([c.name for c in self.next_player.hand]))
+            return "{}'s turn\nThey scored {} points\nThey have in their hand:\n{}" \
+                .format(self.next_player, \
+                        self.board.score(self.next_player), \
+                        str([c.name for c in self.next_player.hand]))
         else:
             return "Final score:\n" + '\n'.join('{}: {}'.format(player, player.score) for player in self.players) + \
-                    "\n{} Wins!".format(max((p for p in self.players), key=lambda x: x.score).name)
+                   "\n{} Wins!".format(max((p for p in self.players), key=lambda x: x.score).name)
 
     def __repr__(self):
         return repr(self.board) + "\n\n" + self.statement()
+
 
 class StartGameState(GameState):
     def __init__(self, board, players):
@@ -461,26 +456,25 @@ class StartGameState(GameState):
 
 
 class Game:
-    def __init__(self, game_state, fname='', save=1, autostart = True):
+    def __init__(self, game_state, fname='', save=1, autostart=True):
         if fname != '':
-            game_state = CurlingIO().load(fname)
+            game_state = load(fname)
             self.fname = fname
             self.save = save
         else:
             self.save = 0
             self.fname = 'err.pi'
-            
+
         self.board = game_state.board
         self.players = game_state.players
         self.discarded = game_state.discarded
         self.p_turn = game_state.p_turn
         self.gameover = game_state.gameover
-        
-        
+
         self.plyhistory = []
 
         if self.save:
-            CurlingIO().dump(self.get_game_state(), self.fname)
+            dump(self.get_game_state(), self.fname)
 
         if autostart:
             self.gameloop()
@@ -495,12 +489,12 @@ class Game:
 
     def turn(self):
         self.gameover = False
-        
+
         player = self.players[self.p_turn]
 
         while True:
             ply = player.make_move(self.get_game_state())
-            
+
             card = player.in_hand(ply.card)
             if not card:
                 return 'Please pick card again'
@@ -510,10 +504,8 @@ class Game:
         if PRINT:
             print(repr(ply))
 
-        
         error = self.make_move(ply)
         return error
-        
 
     def make_move(self, ply):
         player = self.players[self.p_turn]
@@ -525,7 +517,7 @@ class Game:
             player.play(ply.card)
 
             self.p_turn = (self.p_turn + 1) % len(self.players)
-            
+
             next_player = self.players[self.p_turn]
 
             if not next_player.hand:
@@ -533,34 +525,30 @@ class Game:
             else:
                 next_player.alter_score(self.board.score(next_player))
 
-            
-            
             if self.save:
-                CurlingIO().dump(self.get_game_state(), self.fname)
+                dump(self.get_game_state(), self.fname)
             return 'Done'
         return error
-        
+
     def unmake_move(self):
         player = self.players[self.p_turn]
         (unply, undiscard) = self.plyhistory.pop()
-    
+
         if undiscard != "Insert":
             self.discarded.pop()
-
 
         if self.gameover:
             self.unfinal()
         else:
             player.alter_score(-self.board.score(player))
-        
+
         self.p_turn = (self.p_turn - 1) % len(self.players)
         lastplayer = self.players[self.p_turn]
 
-        
         lastplayer.unplay(unply.card)
         self.board.update(unply, True, undiscard)
         if self.save:
-            CurlingIO().dump(self.get_game_state(), self.fname)
+            dump(self.get_game_state(), self.fname)
         return True
 
     def final(self):
@@ -576,7 +564,7 @@ class Game:
             print('Final score:')
             print('\n'.join('{}: {}'.format(player, player.score) for player in self.players))
         if self.save:
-            CurlingIO().dump(game_state, self.fname)
+            dump(self.get_game_state(), self.fname)
         return self.get_game_state().statement()
 
     def unfinal(self):
@@ -586,14 +574,11 @@ class Game:
             score = self.board.score(player)
             player.alter_score(-score)
         if self.save:
-            CurlingIO().dump(game_state, self.fname)
+            dump(self.get_game_state(), self.fname)
         return True
-    
+
     def get_game_state(self):
         return GameState(self.board, self.players, self.discarded, self.p_turn, self.gameover)
-
-
-
 
 
 '''
@@ -604,13 +589,15 @@ def AI_on_off(player_n, ai_on, self.fname='curling.pi'):
 
 '''
 
+
 def main(fname='curling.pi'):
     board = Board(empty=[])
-    players = [AITreeSearch('Matt', chr(9829)),\
-               AIPlayer('F. Rob', chr(9830)),\
+    players = [AITreeSearch('Matt', chr(9829)),
+               AIPlayer('F. Rob', chr(9830)),
                AITreeSearch('Rob H.', chr(9827))]
     game_state = StartGameState(board, players)
     game = Game(game_state)
+
 
 def averages(runs):
     global PRINT
