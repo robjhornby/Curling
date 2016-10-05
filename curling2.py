@@ -227,7 +227,7 @@ class Player:
 
     def unplay(self, card):
         if self.in_hand(card):
-            raise Exception('Card {} aleady in hand during tree backtrack'.format(card))
+            raise Exception('Card {} already in hand during tree backtrack'.format(card))
         if card != '':
             card.played = False
         self.hand.append(card)
@@ -408,24 +408,6 @@ class AITreeSearch(Player):
         return values
 
 
-# class CurlingIO:
-#     def __init__(self):
-#         pass
-
-def dump(game_state, fname):
-    with open(fname, 'wb') as f:
-        pickle.dump(game_state, f)
-
-
-def load(fname):
-    with open(fname, 'rb') as f:
-        game_state = pickle.load(f)
-    return game_state
-
-
-
-
-
 # the information which players are sent to make their move
 class GameState:
     def __init__(self, board, players, discarded, p_turn, gameover):
@@ -458,9 +440,12 @@ class StartGameState(GameState):
 class Game:
     def __init__(self, game_state, fname='', save=1, autostart=True):
         if fname != '':
-            game_state = load(fname)
             self.fname = fname
             self.save = save
+            try:
+                game_state = self.load()
+            except FileNotFoundError:
+                print('No file {} found. Using input GameState')
         else:
             self.save = 0
             self.fname = 'err.pi'
@@ -474,7 +459,7 @@ class Game:
         self.plyhistory = []
 
         if self.save:
-            dump(self.get_game_state(), self.fname)
+            self.dump()
 
         if autostart:
             self.gameloop()
@@ -526,7 +511,7 @@ class Game:
                 next_player.alter_score(self.board.score(next_player))
 
             if self.save:
-                dump(self.get_game_state(), self.fname)
+                self.dump()
             return 'Done'
         return error
 
@@ -548,7 +533,7 @@ class Game:
         lastplayer.unplay(unply.card)
         self.board.update(unply, True, undiscard)
         if self.save:
-            dump(self.get_game_state(), self.fname)
+            self.dump()
         return True
 
     def final(self):
@@ -564,7 +549,7 @@ class Game:
             print('Final score:')
             print('\n'.join('{}: {}'.format(player, player.score) for player in self.players))
         if self.save:
-            dump(self.get_game_state(), self.fname)
+            self.dump()
         return self.get_game_state().statement()
 
     def unfinal(self):
@@ -574,20 +559,28 @@ class Game:
             score = self.board.score(player)
             player.alter_score(-score)
         if self.save:
-            dump(self.get_game_state(), self.fname)
+            self.dump()
         return True
 
     def get_game_state(self):
         return GameState(self.board, self.players, self.discarded, self.p_turn, self.gameover)
 
+    def dump(self):
+        with open(self.fname, 'wb') as f:
+            pickle.dump(self.get_game_state(), f)
 
-'''
-def AI_on_off(player_n, ai_on, self.fname='curling.pi'):
-    board, players, discarded, p_turn, statement = load(self.fname)
-    players[player_n].AI = ai_on
-    dump(board, players, discarded, p_turn, statement, self.fname)
+    def load(self):
+        with open(self.fname, 'rb') as f:
+            return pickle.load(f)
 
-'''
+
+#
+# def AI_on_off(player_n, ai_on, self.fname='curling.pi'):
+#     board, players, discarded, p_turn, statement = load(self.fname)
+#     players[player_n].AI = ai_on
+#     dump(board, players, discarded, p_turn, statement, self.fname)
+#
+#
 
 
 def main(fname='curling.pi'):
@@ -596,7 +589,7 @@ def main(fname='curling.pi'):
                AIPlayer('F. Rob', chr(9830)),
                AITreeSearch('Rob H.', chr(9827))]
     game_state = StartGameState(board, players)
-    game = Game(game_state)
+    game = Game(game_state, fname='curling.pi')
 
 
 def averages(runs):
