@@ -57,7 +57,6 @@ class Board:
                             (2, [(self.joker_pos - 1, self.joker_pos), (self.joker_pos, self.joker_pos - 1),
                                 (self.joker_pos + 1, self.joker_pos), (self.joker_pos, self.joker_pos + 1)])]
 
-        self.first_turn = False
 
     @property
     def cards(self):
@@ -89,8 +88,8 @@ class Board:
     def update(self, ply, undo=False, undiscard=''):
         '''Starting from the outside left as column 0, top as row 0, place your card outisde the space you want to
         insert it, e.g. 0, 2 to insert from the left into the second row'''
-        if undo and undiscard == '':
-            raise Exception('Trying to undo a ply without a card to reinstate')
+        if undo and undiscard == '' and not self.is_insert(ply):
+            raise Exception('Trying to undo a board update without a card to reinstate')
         if undo:
             card = undiscard
         else:
@@ -106,14 +105,12 @@ class Board:
                 error = 'Please choose from empty cells {}'.format(empty)
             else:
                 self._cards[ply.row - 1][ply.column - 1] = card
-                if len(self.get_empty()) == 0:
-                    self.first_turn = True
                 discarded = 'Insert'  # Evaluates True for move, no card actually discarded.
             # Return is important here
             return discarded, error
-        elif undo and (empty or self.first_turn):
+        elif undo and self.is_insert(ply):
             self._cards[ply.row - 1][ply.column - 1] = ''
-            self.first_turn = False
+            
             return 'undo', error
 
         # Check insertion condition, determine if a row or column is being inserted to
@@ -134,6 +131,7 @@ class Board:
             if PRINT:
                 print('Invalid row/column')
             error = 'Invalid row/column'
+            raise Exception('Invalid row/column, ply {}'.format(repr(ply)))
             return discarded, error
 
         # treat left and right insertion the same by reversing in one case
@@ -158,12 +156,16 @@ class Board:
             self._cards = [x for x in map(list, zip(*tempcards))]
 
         discarded.discarded = (not undo)  # Set card attribute
-        self.first_turn = False
         return discarded, error
 
 #    def is_setup_phase(self):
 #        return (len(self.get_empty()) > 0)
 
+    def is_insert(self, ply):
+        if ply.row not in (0, self.size+1) and ply.column not in (0, self.size+1):
+            return True
+        return False
+        
     def __repr__(self):
         out = []
         for row in self._cards:
@@ -237,7 +239,7 @@ class Player:
         return self.score
 
     # To be implemented by inheriting classes
-    def make_move(self, board, players, discarded, p_turn, statement):
+    def make_move(self, board):
         pass
 
     def __repr__(self):
@@ -299,7 +301,7 @@ class AIPlayer(Player):
 class AITreeSearch(Player):
     def postinit(self):
         self.AI = True
-        self.depth = 4  # tree search depth (plies)
+        self.depth = 2  # tree search depth (plies)
         self.t_game = []  # to hold the local version of the game
 
     def make_move(self, game_state):
@@ -311,7 +313,7 @@ class AITreeSearch(Player):
         self.t_game = Game(game_state, autostart=False)  # copy.deepcopy(Game(game_state, autostart = False))
 
         # do a tree search recursively to find the best ply and its expected scores
-        bestscores, bestply = self.tree_search(self.t_game, 2)
+        bestscores, bestply = self.tree_search(self.t_game, self.depth)
 
         # point the resulting card object to the actual card in the real game
         for card in self.hand:
@@ -336,15 +338,18 @@ class AITreeSearch(Player):
                              [(i, 0) for i in range(1, bsize + 1)] + \
                              [(i, bsize + 1) for i in range(1, bsize + 1)]
 
-        # just choose the highest value card for now
-        card_choice = card_options[0]
-
-        for rowcol in rowcol_options:
-            yield Ply(card_choice, rowcol[0], rowcol[1])
+        #choose either the highest or lowest value card
+        if len(card_options) > 1:
+            card_choices = [card_options[0], card_options[-1]]
+        else:
+            card_choices = [card_options[0]]
+            
+        for card in card_choices:
+            for rowcol in rowcol_options:
+                yield Ply(card, rowcol[0], rowcol[1])
 
     # recursive search of future moves to the given depth
     def tree_search(self, game, depth):
-        plyvalues = []
         p_turn = game.p_turn
         plies = self.enum_plies(game)
         best = ''
@@ -377,7 +382,7 @@ class AITreeSearch(Player):
                 score = player.score
                 boardscore = game.board.score(player) * (4 - waittime)  # how good the board is
                 # add some value for cards not currently in scoring positions
-                for row, x in enumerate(game.board.cards):
+                for row, x in enumerate(game.board._cards):
                     for column, card in enumerate(x):
                         if card != '' and card.suit == player.suit:
                             if row in (2, 3, 4) or column in (2, 3, 4):
@@ -470,7 +475,6 @@ class Game:
         while not self.gameover:
             if PRINT:
                 print('\n'.join('{}: {}'.format(player, player.score) for player in self.players))
-            if PRINT:
                 print(self.get_game_state())
             self.turn()
 
@@ -515,6 +519,8 @@ class Game:
             if self.save:
                 self.dump()
             return 'Done'
+        
+        raise Exception('Invalid value for discard during make_move, board: \n{}'.format(repr(self.board)))
         return error
 
     def unmake_move(self):
@@ -532,8 +538,9 @@ class Game:
         self.p_turn = (self.p_turn - 1) % len(self.players)
         lastplayer = self.players[self.p_turn]
 
-        lastplayer.unplay(unply.card)
         self.board.update(unply, True, undiscard)
+        lastplayer.unplay(unply.card)
+        
         if self.save:
             self.dump()
         return True
