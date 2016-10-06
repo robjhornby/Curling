@@ -52,10 +52,10 @@ class Board:
             empty = [(0, 0), (0, 1), (0, 3), (0, 4), (1, 0), (1, 4), (3, 0), (3, 4), (4, 0), (4, 1), (4, 3), (4, 4)]
         for x, y in empty:
             self._cards[x][y] = ''
-        self.scoring_pos = {1: [(self.joker_pos - 1, self.joker_pos - 1), (self.joker_pos - 1, self.joker_pos + 1),
-                                (self.joker_pos + 1, self.joker_pos - 1), (self.joker_pos + 1, self.joker_pos + 1)],
-                            2: [(self.joker_pos - 1, self.joker_pos), (self.joker_pos, self.joker_pos - 1),
-                                (self.joker_pos + 1, self.joker_pos), (self.joker_pos, self.joker_pos + 1)]}
+        self.scoring_pos = [(1, [(self.joker_pos - 1, self.joker_pos - 1), (self.joker_pos - 1, self.joker_pos + 1),
+                                (self.joker_pos + 1, self.joker_pos - 1), (self.joker_pos + 1, self.joker_pos + 1)]),
+                            (2, [(self.joker_pos - 1, self.joker_pos), (self.joker_pos, self.joker_pos - 1),
+                                (self.joker_pos + 1, self.joker_pos), (self.joker_pos, self.joker_pos + 1)])]
 
         self.first_turn = False
 
@@ -78,7 +78,7 @@ class Board:
     def score(self, player):
         out = 0
         if not self._final:
-            for s, l in self.scoring_pos.items():
+            for s, l in self.scoring_pos:
                 for x, y in l:
                     if self._cards[x][y] and self._cards[x][y].suit == player.suit:
                         out += s * self._cards[x][y].value
@@ -97,14 +97,13 @@ class Board:
             card = ply.card
 
         error = ''
-        if self.is_setup_phase() and not undo:
-
-            l = self.get_empty()
-            if (ply.row, ply.column) not in l:
+        empty = self.get_empty()
+        if empty and not undo:
+            if (ply.row, ply.column) not in empty:
                 if PRINT:
-                    print('Please choose from empty cells', l)
+                    print('Please choose from empty cells', empty)
                 discarded = ''
-                error = 'Please choose from empty cells {}'.format(l)
+                error = 'Please choose from empty cells {}'.format(empty)
             else:
                 self._cards[ply.row - 1][ply.column - 1] = card
                 if len(self.get_empty()) == 0:
@@ -112,11 +111,9 @@ class Board:
                 discarded = 'Insert'  # Evaluates True for move, no card actually discarded.
             # Return is important here
             return discarded, error
-
-        elif undo and (self.is_setup_phase() or self.first_turn):
+        elif undo and (empty or self.first_turn):
             self._cards[ply.row - 1][ply.column - 1] = ''
             self.first_turn = False
-
             return 'undo', error
 
         # Check insertion condition, determine if a row or column is being inserted to
@@ -164,8 +161,8 @@ class Board:
         self.first_turn = False
         return discarded, error
 
-    def is_setup_phase(self):
-        return (len(self.get_empty()) > 0)
+#    def is_setup_phase(self):
+#        return (len(self.get_empty()) > 0)
 
     def __repr__(self):
         out = []
@@ -191,7 +188,7 @@ class Ply:
         self.column = column
 
     def __repr__(self):
-        return (repr(self.card) + " at " + str(self.row) + ", " + str(self.column))
+        return repr(self.card) + " at " + str(self.row) + ", " + str(self.column)
 
 
 class Player:
@@ -227,7 +224,7 @@ class Player:
 
     def unplay(self, card):
         if self.in_hand(card):
-            raise Exception('Card {} aleady in hand during tree backtrack'.format(card))
+            raise Exception('Card {} already in hand during tree backtrack'.format(card))
         if card != '':
             card.played = False
         self.hand.append(card)
@@ -320,7 +317,7 @@ class AITreeSearch(Player):
         for card in self.hand:
             if card.name == bestply.card.name:
                 bestply.card = card
-        print("Exit AITree make_move, best scores: " + repr(bestscores))
+        print("Exit AITree make_move, best scores: ", bestscores)
         PRINT = True
         return bestply
 
@@ -329,9 +326,9 @@ class AITreeSearch(Player):
         # assuming we have cards left to play
         player = game.players[game.p_turn]
         card_options = sorted(player.hand, key=lambda x: -x.value)  # cards ordered high-low
-
-        if game.board.is_setup_phase():
-            rowcol_options = game.board.get_empty()
+        empty = game.board.get_empty()
+        if empty:
+            rowcol_options = empty
         else:
             bsize = game.board.size
             rowcol_options = [(0, i) for i in range(1, bsize + 1)] + \
@@ -395,35 +392,21 @@ class AITreeSearch(Player):
                 values[i] = pointdiff + 0.2 * boardscore + 0.5 * hand_potential
         else:
             maxscore = 0
-            winner_id = 0
+            winner_ids = []
             for i, player in enumerate(game.players):
                 if player.score > maxscore:
                     maxscore = player.score
-                    winner_id = i
+                    winner_ids = [i]
+                elif player.score == maxscore:
+                    winner_ids.append(i)
             # losers have a large negative score
             values = [-10000] * len(game.players)
             # winner has a large positive score
-            values[winner_id] = 10000
+            # TODO: Should joint winners have lower score?
+            for i in winner_ids:
+                values[i] = 10000
 
         return values
-
-
-# class CurlingIO:
-#     def __init__(self):
-#         pass
-
-def dump(game_state, fname):
-    with open(fname, 'wb') as f:
-        pickle.dump(game_state, f)
-
-
-def load(fname):
-    with open(fname, 'rb') as f:
-        game_state = pickle.load(f)
-    return game_state
-
-
-
 
 
 # the information which players are sent to make their move
@@ -456,11 +439,15 @@ class StartGameState(GameState):
 
 
 class Game:
-    def __init__(self, game_state, fname='', save=1, autostart=True):
+    def __init__(self, game_state, fname='', save=1, load=1, autostart=True):
         if fname != '':
-            game_state = load(fname)
             self.fname = fname
             self.save = save
+            if load:
+                try:
+                    game_state = self.load()
+                except FileNotFoundError:
+                    print('No file {} found. Using input GameState')
         else:
             self.save = 0
             self.fname = 'err.pi'
@@ -474,7 +461,7 @@ class Game:
         self.plyhistory = []
 
         if self.save:
-            dump(self.get_game_state(), self.fname)
+            self.dump()
 
         if autostart:
             self.gameloop()
@@ -502,7 +489,7 @@ class Game:
                 break
 
         if PRINT:
-            print(repr(ply))
+            print(ply)
 
         error = self.make_move(ply)
         return error
@@ -526,7 +513,7 @@ class Game:
                 next_player.alter_score(self.board.score(next_player))
 
             if self.save:
-                dump(self.get_game_state(), self.fname)
+                self.dump()
             return 'Done'
         return error
 
@@ -548,7 +535,7 @@ class Game:
         lastplayer.unplay(unply.card)
         self.board.update(unply, True, undiscard)
         if self.save:
-            dump(self.get_game_state(), self.fname)
+            self.dump()
         return True
 
     def final(self):
@@ -564,7 +551,7 @@ class Game:
             print('Final score:')
             print('\n'.join('{}: {}'.format(player, player.score) for player in self.players))
         if self.save:
-            dump(self.get_game_state(), self.fname)
+            self.dump()
         return self.get_game_state().statement()
 
     def unfinal(self):
@@ -574,20 +561,28 @@ class Game:
             score = self.board.score(player)
             player.alter_score(-score)
         if self.save:
-            dump(self.get_game_state(), self.fname)
+            self.dump()
         return True
 
     def get_game_state(self):
         return GameState(self.board, self.players, self.discarded, self.p_turn, self.gameover)
 
+    def dump(self):
+        with open(self.fname, 'wb') as f:
+            pickle.dump(self.get_game_state(), f)
 
-'''
-def AI_on_off(player_n, ai_on, self.fname='curling.pi'):
-    board, players, discarded, p_turn, statement = load(self.fname)
-    players[player_n].AI = ai_on
-    dump(board, players, discarded, p_turn, statement, self.fname)
+    def load(self):
+        with open(self.fname, 'rb') as f:
+            return pickle.load(f)
 
-'''
+
+#
+# def AI_on_off(player_n, ai_on, self.fname='curling.pi'):
+#     board, players, discarded, p_turn, statement = load(self.fname)
+#     players[player_n].AI = ai_on
+#     dump(board, players, discarded, p_turn, statement, self.fname)
+#
+#
 
 
 def main(fname='curling.pi'):
@@ -596,7 +591,7 @@ def main(fname='curling.pi'):
                AIPlayer('F. Rob', chr(9830)),
                AITreeSearch('Rob H.', chr(9827))]
     game_state = StartGameState(board, players)
-    game = Game(game_state)
+    game = Game(game_state, fname=fname, save=0, load=0)
 
 
 def averages(runs):
