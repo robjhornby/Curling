@@ -416,10 +416,10 @@ class AITreeSearch(Player):
 
 # the information which players are sent to make their move
 class GameState:
-    def __init__(self, board, players, discarded, p_turn, gameover):
+    def __init__(self, board, players, plyhistory, p_turn, gameover):
         self.board = board
         self.players = players
-        self.discarded = discarded
+        self.plyhistory = plyhistory
         self.p_turn = p_turn
         self.next_player = self.players[self.p_turn]
         self.gameover = gameover
@@ -459,7 +459,7 @@ class Game:
 
         self.board = game_state.board
         self.players = game_state.players
-        self.discarded = game_state.discarded
+        self.plyhistory = game_state.plyhistory
         self.p_turn = game_state.p_turn
         self.gameover = game_state.gameover
 
@@ -501,10 +501,9 @@ class Game:
     def make_move(self, ply):
         player = self.players[self.p_turn]
         discard, error = self.board.update(ply)
+        
         self.plyhistory.append((ply, discard))
         if discard:
-            if discard != 'Insert':
-                self.discarded.append(discard)
             player.play(ply.card)
 
             self.p_turn = (self.p_turn + 1) % len(self.players)
@@ -526,9 +525,6 @@ class Game:
     def unmake_move(self):
         player = self.players[self.p_turn]
         (unply, undiscard) = self.plyhistory.pop()
-
-        if undiscard != "Insert":
-            self.discarded.pop()
 
         if self.gameover:
             self.unfinal()
@@ -572,7 +568,7 @@ class Game:
         return True
 
     def get_game_state(self):
-        return GameState(self.board, self.players, self.discarded, self.p_turn, self.gameover)
+        return GameState(self.board, self.players, self.plyhistory, self.p_turn, self.gameover)
 
     def dump(self):
         with open(self.fname, 'wb') as f:
@@ -593,7 +589,7 @@ class Game:
 
 
 def main(fname='curling.pi'):
-    board = Board(empty=[])
+    board = Board()
     players = [AITreeSearch('Matt', chr(9829)),
                AIPlayer('F. Rob', chr(9830)),
                AITreeSearch('Rob H.', chr(9827))]
